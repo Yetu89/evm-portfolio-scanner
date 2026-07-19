@@ -61,8 +61,8 @@ export async function enrichV3Position(
     };
   }
 
-  // The result from viem is returned as an array when using as unknown as
-  const posArray = position as unknown[];
+  // The result from viem is returned as a readonly tuple; widen via unknown
+  const posArray = position as unknown as unknown[];
   if (posArray.length >= 12) {
     // Convert array to object
     const typedPosition = {
