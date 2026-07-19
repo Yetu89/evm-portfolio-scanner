@@ -34,6 +34,7 @@ function scanChainForWallet(
   wallet: `0x${string}`,
   chain: ChainConfig
 ): Promise<Position[]> {
+  console.log(`[SCAN] Scanning chain ${chain.name} (chainId=${chain.chainId}) for wallet ${wallet}`);
   const tasks = chain.protocols.map((protocolConfig) => {
     return async (): Promise<Position[]> => {
       const protocol = protocols.find((p) => p.id === protocolConfig.id);
@@ -43,7 +44,9 @@ function scanChainForWallet(
       }
 
       try {
-        return await protocol.scan(wallet, chain, protocolConfig);
+        const result = await protocol.scan(wallet, chain, protocolConfig);
+        console.log(`[SCAN] ${protocolConfig.name} on ${chain.name}: ${result.length} positions`);
+        return result;
       } catch (error) {
         console.error(
           `Failed to scan ${protocolConfig.name} on ${chain.name} for ${wallet}:`,
@@ -61,6 +64,7 @@ export async function scanWalletsAcrossChains(
   wallets: string[],
   concurrency: number = DEFAULT_CONCURRENCY
 ): Promise<Position[]> {
+  console.log(`[SCAN] Starting scan for ${wallets.length} wallet(s) across ${chains.length} chains`);
   const tasks: (() => Promise<Position[]>)[] = [];
 
   for (const wallet of wallets) {

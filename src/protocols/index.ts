@@ -5,6 +5,27 @@ export interface Position {
   chain: string;
   tokenId: string;
   protocol: string;
+
+  // Portfolio fields
+  pool: string;
+  token0: string;
+  token1: string;
+  fee: number;
+  tickLower: number;
+  tickUpper: number;
+  liquidity: string;
+  tokensOwed0: string;
+  tokensOwed1: string;
+  token0Symbol?: string;
+  token1Symbol?: string;
+  token0Decimals?: number;
+  token1Decimals?: number;
+  token0PriceUsd?: number;
+  token1PriceUsd?: number;
+  amount0: string;
+  amount1: string;
+  valueUsd?: number;
+  inRange?: boolean;
 }
 
 export interface Protocol {

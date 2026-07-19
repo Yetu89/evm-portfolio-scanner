@@ -5,6 +5,8 @@ export interface ProtocolConfig {
   name: string;
   type: "v3" | "v4";
   positionManager: Address;
+  /** V4 StateView contract for reading pool slot0 / liquidity */
+  stateView?: Address;
 }
 
 export interface ChainConfig {
@@ -56,7 +58,7 @@ export const chains: ChainConfig[] = [
         id: "aerodrome",
         name: "Aerodrome",
         type: "v3",
-        positionManager: "0x827922686190790b37229fd060973282D2aEAad1",
+        positionManager: "0x827922686190790b37229fd060973282d2aad1",
       },
     ],
   },
@@ -84,7 +86,7 @@ export const chains: ChainConfig[] = [
         id: "camelot-v3",
         name: "Camelot V3",
         type: "v3",
-        positionManager: "0xC7Dd547B547d90a1E1a7e4D5e7e8aB4F1F6F6F6F",
+        positionManager: "0xc7dd547b547d90a1e1a7e4d5e7e8ab4f1f6f6f6f",
       },
       {
         id: "pancakeswap-v3",
@@ -112,7 +114,7 @@ export const chains: ChainConfig[] = [
         id: "velodrome",
         name: "Velodrome",
         type: "v3",
-        positionManager: "0x827922686190790b37229fd060973282D2aEAad1",
+        positionManager: "0x827922686190790b37229fd060973282d2aad1",
       },
     ],
   },
@@ -399,6 +401,7 @@ export const chains: ChainConfig[] = [
         name: "Uniswap V4",
         type: "v4",
         positionManager: "0x58daec3116aae6d93017baaea7749052e8a04fa7",
+        stateView: "0xF3334192D15450CdD385c8B70e03f9A6bD9E673b",
       },
     ],
   },
