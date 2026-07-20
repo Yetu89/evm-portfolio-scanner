@@ -2,7 +2,7 @@ import { Address } from "viem";
 import { createRpcClient } from "@/lib/client";
 import { POSITION_MANAGER_V3_ABI, POOL_V3_ABI } from "./abis/v3";
 import { getTokenMetadata } from "./pricing/tokens";
-import { getSqrtRatioAtTick, getAmount0ForLiquidity, getAmount1ForLiquidity } from "./math";
+import { getSqrtRatioAtTick, getAmountsForLiquidity } from "./math";
 
 export async function enrichV3Position(
   rpcUrl: string,
@@ -110,8 +110,9 @@ export async function enrichV3Position(
     // Pool identifier: deterministic from token0, token1, fee
     const pool = computePoolId(token0, token1, fee);
 
-    // Get pool current tick via slot0
+    // Get pool current tick and sqrtPriceX96 via slot0
     let currentTick = 0;
+    let sqrtPriceX96 = BigInt(0);
     let inRange = false;
 
     try {
@@ -121,6 +122,7 @@ export async function enrichV3Position(
         functionName: "slot0",
       }) as [bigint, number, number, number, number, number, boolean];
 
+      sqrtPriceX96 = slot0[0];
       currentTick = slot0[1];
       inRange = currentTick >= tickLower && currentTick <= tickUpper;
     } catch {
@@ -128,7 +130,7 @@ export async function enrichV3Position(
       inRange = false;
     }
 
-    // Calculate amounts from liquidity + ticks
+    // Calculate amounts from liquidity + ticks using current price
     let amount0 = "0";
     let amount1 = "0";
 
@@ -136,8 +138,17 @@ export async function enrichV3Position(
       const sqrtRatioAX96 = getSqrtRatioAtTick(tickLower);
       const sqrtRatioBX96 = getSqrtRatioAtTick(tickUpper);
 
-      amount0 = getAmount0ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity).toString();
-      amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity).toString();
+      if (sqrtPriceX96 > BigInt(0)) {
+        // Use current price to calculate correct amounts (same as V4)
+        const amounts = getAmountsForLiquidity(
+          sqrtPriceX96,
+          sqrtRatioAX96,
+          sqrtRatioBX96,
+          liquidity
+        );
+        amount0 = amounts.amount0.toString();
+        amount1 = amounts.amount1.toString();
+      }
     }
 
   // Skip inactive positions (liquidity=0 means closed/empty)

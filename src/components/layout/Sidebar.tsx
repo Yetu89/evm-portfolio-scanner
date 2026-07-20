@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { getActiveWallet } from "@/components/active-wallet";
 
 export interface NavItem {
   key: string;
@@ -10,7 +10,7 @@ export interface NavItem {
   href?: string;
 }
 
-// Menu order per spec. Dashboard = "/", Wallet Portfolio = "/wallet/[address]".
+// Menu order per spec.
 export const NAV_ITEMS: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: "▦", href: "/" },
   { key: "portfolio", label: "Portfolio", icon: "◈", href: undefined },
@@ -26,6 +26,24 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "settings", label: "Settings", icon: "⚙", href: undefined },
 ];
 
+/**
+ * Resolve navigation href for items that depend on an active wallet.
+ */
+function resolveItemHref(item: NavItem, activeWallet: string | null): string | null {
+  if (item.href) return item.href; // static route (Dashboard)
+  if (!activeWallet) return "/";   // no active wallet → Dashboard
+  switch (item.key) {
+    case "portfolio":
+      return `/wallet/${activeWallet}`;
+    case "positions":
+      return `/wallet/${activeWallet}/positions`;
+    case "tokens":
+      return `/wallet/${activeWallet}/tokens`;
+    default:
+      return null; // no route yet
+  }
+}
+
 export function Sidebar({
   collapsed,
   onToggle,
@@ -35,6 +53,7 @@ export function Sidebar({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const activeWallet = getActiveWallet();
 
   return (
     <aside
@@ -62,17 +81,21 @@ export function Sidebar({
       <nav className="flex-1 overflow-y-auto px-2 py-4">
         <ul className="space-y-1">
           {NAV_ITEMS.map((item) => {
-            const isActive = item.href
-              ? pathname === item.href
-              : pathname.startsWith("/wallet/") && item.key === "portfolio";
+            const href = resolveItemHref(item, activeWallet);
+            const isActive = href
+              ? pathname === href || pathname.startsWith(href + "/")
+              : pathname.includes("/positions") && item.key === "positions"
+                ? true
+                : pathname.includes("/tokens") && item.key === "tokens"
+                  ? true
+                  : false;
+
             return (
               <li key={item.key}>
                 <button
                   type="button"
                   onClick={() => {
-                    if (item.href) {
-                      router.push(item.href);
-                    }
+                    if (href) router.push(href);
                   }}
                   data-nav-key={item.key}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${

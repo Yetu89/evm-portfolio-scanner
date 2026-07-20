@@ -1,50 +1,57 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { setActiveWallet } from "@/components/active-wallet";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-interface Position {
-  wallet: string;
-  chain: string;
-  tokenId: string;
-  protocol: string;
-  pool: string;
-  token0: string;
-  token1: string;
-  fee: number;
-  tickLower: number;
-  tickUpper: number;
-  liquidity: string;
-  tokensOwed0: string;
-  tokensOwed1: string;
-  amount0: string;
-  amount1: string;
-  valueUsd?: number;
-  inRange: boolean;
-  currentTick?: number;
+interface WalletAsset {
+  type: "native-coin" | "token" | "lp-position";
+  chainId: number;
+  chainName: string;
+  symbol?: string;
+  address?: string;
+  balance?: string;
+  decimals?: number;
+  protocol?: string;
+  pool?: string;
+  token0?: string;
+  token1?: string;
   token0Symbol?: string;
   token1Symbol?: string;
   token0Decimals?: number;
   token1Decimals?: number;
-  token0PriceUsd?: number;
-  token1PriceUsd?: number;
+  fee?: number;
+  tokenId?: string;
+  liquidity?: string;
+  amount0?: string;
+  amount1?: string;
+  token0PriceUsd?: number | null;
+  token1PriceUsd?: number | null;
+  priceUsd?: number | null;
+  inRange?: boolean;
+  valueUsd: number;
 }
 
-interface PortfolioSummary {
-  totalValue: number | null;
-  totalUnclaimedFees: number;
-  totalPositions: number;
-  totalChains: number;
-  totalProtocols: number;
+interface ChainBreakdown {
+  chainId: number;
+  chainName: string;
+  totalValueUsd: number;
+  assetCount: number;
 }
 
-interface ScanResult {
-  wallets: string[];
-  positions: Position[];
-  summary: PortfolioSummary;
+interface WalletPortfolio {
+  wallet: string;
+  chainCount: number;
+  nativeCoinCount: number;
+  tokenCount: number;
+  lpPositionCount: number;
+  totalAssets: number;
+  totalValueUsd: number;
+  assets: WalletAsset[];
+  chainBreakdown: ChainBreakdown[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -68,59 +75,41 @@ function formatNumber(value: string, decimals?: number): string {
   const divisor = Math.pow(10, decimals || 18);
   const formatted = num / divisor;
   if (formatted < 0.0001) return "<0.0001";
-  return formatted.toLocaleString("en-US", {
-    maximumFractionDigits: 6,
-  });
+  return formatted.toLocaleString("en-US", { maximumFractionDigits: 6 });
 }
 
-// ── Icon Components ────────────────────────────────────────────────
-
-function TrendUpIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M12 7l-5 5 1.41 1.41L11 9.83V17h2V9.83l2.59 2.58L14 9.83L12 7z" clipRule="evenodd" />
-    </svg>
-  );
-}
-
-function SparklineIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1 8L5 4L9 7L13 2L17 6L21 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// ── Summary Card Component ─────────────────────────────────────────
+// ── Summary Card ───────────────────────────────────────────────────
 
 function SummaryCard({
   title,
   value,
   icon,
-  trend,
   color,
+  onClick,
 }: {
   title: string;
   value: string;
   icon: string;
-  trend?: "up" | "down";
   color: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:shadow-lg hover:shadow-black/20 p-6">
-      <div className={`absolute -right-4 -top-4 h-20 w-20 rounded-full opacity-10 blur-xl group-hover:opacity-20 transition-opacity`} style={{ backgroundColor: color }} />
+    <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all duration-300 hover:shadow-lg hover:shadow-black/20 p-6 ${
+        onClick ? "cursor-pointer" : ""
+      }`}
+    >
+      <div
+        className={`absolute -right-4 -top-4 h-20 w-20 rounded-full opacity-10 blur-xl group-hover:opacity-20 transition-opacity`}
+        style={{ backgroundColor: color }}
+      />
       <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{icon}</span>
-            <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">{title}</span>
-          </div>
-          {trend && (
-            <div className={`flex items-center gap-1 text-xs font-medium ${trend === "up" ? "text-emerald-400" : "text-red-400"}`}>
-              {trend === "up" ? <TrendUpIcon className="w-3 h-3" /> : null}
-              <SparklineIcon className="w-6 h-3" />
-            </div>
-          )}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">{icon}</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">{title}</span>
         </div>
         <div className="text-2xl font-bold text-white mb-1">{value}</div>
       </div>
@@ -137,22 +126,23 @@ export default function WalletPortfolioPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ScanResult | null>(null);
+  const [portfolio, setPortfolio] = useState<WalletPortfolio | null>(null);
 
   useEffect(() => {
     if (!address) return;
 
-    async function fetchWallet() {
+    async function fetchPortfolio() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/portfolio?wallet=${encodeURIComponent(address)}`);
+        const res = await fetch(`/api/wallet/${encodeURIComponent(address)}`);
         if (!res.ok) {
           const body = await res.json().catch(() => null);
           throw new Error(body?.error || `HTTP ${res.status}`);
         }
-        const data: ScanResult = await res.json();
-        setResult(data);
+        const data: WalletPortfolio = await res.json();
+        setPortfolio(data);
+        setActiveWallet(address);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Scan failed");
       } finally {
@@ -160,13 +150,13 @@ export default function WalletPortfolioPage() {
       }
     }
 
-    fetchWallet();
+    fetchPortfolio();
   }, [address]);
 
   // ── Render ───────────────────────────────────────────────────────
 
   return (
-    <DashboardShell wallet={result?.wallets[0]} onSearch={(q) => router.push(`/wallet/${q.trim()}`)}>
+    <DashboardShell wallet={address}>
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="mb-8 flex items-center justify-between">
         <div>
@@ -186,7 +176,9 @@ export default function WalletPortfolioPage() {
       {loading && (
         <div className="mb-8 flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 backdrop-blur-sm">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-600 border-t-blue-500" />
-          <span className="text-zinc-300 text-sm">Scanning across all supported chains…</span>
+          <span className="text-zinc-300 text-sm">
+            Scanning wallet across all supported chains…
+          </span>
         </div>
       )}
 
@@ -198,132 +190,190 @@ export default function WalletPortfolioPage() {
         </div>
       )}
 
-      {/* ── Summary Cards ───────────────────────────────────────── */}
-      {result && result.summary && (
-        <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <SummaryCard
-            title="Total LP Value"
-            value={formatCurrency(result.summary.totalValue)}
-            icon="💰"
-            trend="up"
-            color="#10b981"
-          />
-          <SummaryCard
-            title="Unclaimed Fees"
-            value={formatCurrency(result.summary.totalUnclaimedFees)}
-            icon="📊"
-            trend={result.summary.totalUnclaimedFees > 0 ? "up" : undefined}
-            color="#3b82f6"
-          />
-          <SummaryCard
-            title="Total Positions"
-            value={result.summary.totalPositions.toString()}
-            icon="🎯"
-            color="#8b5cf6"
-          />
-          <SummaryCard
-            title="Chains"
-            value={result.summary.totalChains.toString()}
-            icon="🌐"
-            color="#f59e0b"
-          />
-        </div>
-      )}
-
-      {/* ── LP Positions Table ──────────────────────────────────── */}
-      {result && result.positions.length > 0 && (
-        <div className="mb-8 rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all duration-300 overflow-hidden">
-          <div className="p-6 border-b border-zinc-800">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <span className="text-2xl">📈</span>
-              LP Positions
-            </h2>
-            <p className="text-sm text-zinc-500 mt-1">
-              {result.positions.length} position{result.positions.length > 1 ? "s" : ""} across {result.summary.totalChains} chain{result.summary.totalChains > 1 ? "s" : ""}
-            </p>
+      {/* ── Results ─────────────────────────────────────────────── */}
+      {portfolio && (
+        <>
+          {/* Summary Cards */}
+          <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <SummaryCard
+              title="Total Value"
+              value={formatCurrency(portfolio.totalValueUsd)}
+              icon="💰"
+              color="#10b981"
+            />
+            <SummaryCard
+              title="Assets"
+              value={portfolio.totalAssets.toString()}
+              icon="🧩"
+              color="#3b82f6"
+              onClick={() => router.push(`/wallet/${address}/tokens`)}
+            />
+            <SummaryCard
+              title="Chains"
+              value={portfolio.chainCount.toString()}
+              icon="🌐"
+              color="#8b5cf6"
+            />
+            <SummaryCard
+              title="LP Positions"
+              value={portfolio.lpPositionCount.toString()}
+              icon="📈"
+              color="#f59e0b"
+              onClick={() => router.push(`/wallet/${address}/positions`)}
+            />
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-950/50">
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Chain</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Protocol</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Pool</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Token0</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Token1</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Fee</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Token ID</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Status</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Amount0</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Amount1</th>
-                  <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Value (USD)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.positions.map((position, i) => (
-                  <tr
-                    key={`${position.wallet}-${position.chain}-${position.protocol}-${position.tokenId}-${i}`}
-                    className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
-                  >
-                    <td className="py-4 pr-4">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                        <span className="text-zinc-300">{position.chain}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 pr-4 text-zinc-300">{position.protocol}</td>
-                    <td className="py-4 pr-4 font-mono text-xs text-zinc-400">
-                      {position.pool ? `${position.pool.slice(0, 6)}…${position.pool.slice(-4)}` : "-"}
-                    </td>
-                    <td className="py-4 pr-4">
-                      <div className="font-mono text-xs text-zinc-400">
-                        {position.token0 ? `${position.token0.slice(0, 6)}…${position.token0.slice(-4)}` : "-"}
-                      </div>
-                      {position.token0Symbol && (
-                        <div className="text-zinc-500 text-xs">{position.token0Symbol}</div>
-                      )}
-                    </td>
-                    <td className="py-4 pr-4">
-                      <div className="font-mono text-xs text-zinc-400">
-                        {position.token1 ? `${position.token1.slice(0, 6)}…${position.token1.slice(-4)}` : "-"}
-                      </div>
-                      {position.token1Symbol && (
-                        <div className="text-zinc-500 text-xs">{position.token1Symbol}</div>
-                      )}
-                    </td>
-                    <td className="py-4 pr-4 font-mono text-zinc-300">{position.fee / 10000}%</td>
-                    <td className="py-4 pr-4 font-mono text-zinc-300">{position.tokenId}</td>
-                    <td className="py-4 pr-4">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                        position.inRange
-                          ? "bg-emerald-900/50 text-emerald-400 border border-emerald-800/50"
-                          : "bg-red-900/50 text-red-400 border border-red-800/50"
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${position.inRange ? "bg-emerald-400" : "bg-red-400"}`}></span>
-                        {position.inRange ? "In Range" : "Out of Range"}
-                      </span>
-                    </td>
-                    <td className="py-4 pr-4 font-mono text-zinc-300">{formatNumber(position.amount0, position.token0Decimals)}</td>
-                    <td className="py-4 pr-4 font-mono text-zinc-300">{formatNumber(position.amount1, position.token1Decimals)}</td>
-                    <td className="py-4 pr-4 font-semibold text-emerald-400">{formatCurrency(position.valueUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Chain Breakdown */}
+          <div className="mb-8 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {portfolio.chainBreakdown.map((chain) => (
+              <div
+                key={chain.chainId}
+                className="rounded-xl bg-zinc-900 p-4 border border-zinc-800"
+              >
+                <div className="text-zinc-400 text-xs uppercase tracking-wider mb-1">
+                  {chain.chainName}
+                </div>
+                <div className="text-lg font-bold text-white">
+                  {formatCurrency(chain.totalValueUsd)}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {chain.assetCount} asset{chain.assetCount > 1 ? "s" : ""}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
 
-      {/* ── Empty positions ─────────────────────────────────────── */}
-      {result && result.positions.length === 0 && (
-        <div className="mb-8 rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 p-12 text-center">
-          <div className="text-4xl mb-4">🔍</div>
-          <div className="text-zinc-400 text-lg font-medium">No LP positions found.</div>
-          <div className="text-zinc-600 text-sm mt-2 max-w-md mx-auto">
-            The wallet may not have any active positions on supported chains. Try searching a different wallet.
-          </div>
-        </div>
+          {/* Assets Table */}
+          {portfolio.assets.length > 0 && (
+            <div className="rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 overflow-hidden">
+              <div className="p-6 border-b border-zinc-800">
+                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <span className="text-2xl">📋</span>
+                  All Assets
+                </h2>
+                <p className="text-sm text-zinc-500 mt-1">
+                  {portfolio.assets.length} asset{portfolio.assets.length > 1 ? "s" : ""} across{" "}
+                  {portfolio.chainCount} chain{portfolio.chainCount > 1 ? "s" : ""}
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-800 bg-zinc-950/50">
+                      <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Type</th>
+                      <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Chain</th>
+                      <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Asset</th>
+                      <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Balance</th>
+                      <th className="py-4 pr-4 text-zinc-400 font-medium text-xs uppercase tracking-wider">Value (USD)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {portfolio.assets
+                      .sort((a, b) => Math.abs(b.valueUsd) - Math.abs(a.valueUsd))
+                      .map((asset, i) => {
+                        const key = `${asset.type}-${asset.chainId}-${asset.tokenId || asset.address || asset.symbol}-${i}`;
+                        return (
+                          <tr
+                            key={key}
+                            className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
+                          >
+                            <td className="py-4 pr-4">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border"
+                                style={{
+                                  backgroundColor:
+                                    asset.type === "native-coin"
+                                      ? "rgba(16, 185, 129, 0.1)"
+                                      : asset.type === "token"
+                                        ? "rgba(59, 130, 246, 0.1)"
+                                        : "rgba(139, 92, 246, 0.1)",
+                                  borderColor:
+                                    asset.type === "native-coin"
+                                      ? "rgba(16, 185, 129, 0.3)"
+                                      : asset.type === "token"
+                                        ? "rgba(59, 130, 246, 0.3)"
+                                        : "rgba(139, 92, 246, 0.3)",
+                                  color:
+                                    asset.type === "native-coin"
+                                      ? "#34d399"
+                                      : asset.type === "token"
+                                        ? "#60a5fa"
+                                        : "#a78bfa",
+                                }}
+                              >
+                                {asset.type === "native-coin"
+                                  ? "Native"
+                                  : asset.type === "token"
+                                    ? "Token"
+                                    : "LP"}
+                              </span>
+                            </td>
+                            <td className="py-4 pr-4">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                <span className="text-zinc-300">{asset.chainName}</span>
+                              </div>
+                            </td>
+                            <td className="py-4 pr-4">
+                              <div className="text-zinc-300">
+                                {asset.type === "lp-position"
+                                  ? `${asset.token0Symbol || "?"} / ${asset.token1Symbol || "?"}`
+                                  : asset.symbol || "?"}
+                              </div>
+                              {asset.type === "lp-position" && (
+                                <div className="text-xs text-zinc-500">
+                                  {asset.protocol} • ID {asset.tokenId}
+                                </div>
+                              )}
+                              {asset.type === "token" && asset.address && (
+                                <div className="text-xs text-zinc-500 font-mono">
+                                  {asset.address.slice(0, 6)}…{asset.address.slice(-4)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-4 pr-4">
+                              <div className="text-zinc-300">
+                                {asset.type === "lp-position"
+                                  ? `${formatNumber(asset.amount0 || "0", asset.token0Decimals)} ${asset.token0Symbol} / ${formatNumber(asset.amount1 || "0", asset.token1Decimals)} ${asset.token1Symbol}`
+                                  : formatNumber(
+                                      (asset.balance || "0").toString(),
+                                      asset.decimals
+                                    ) + " " + (asset.symbol || "")}
+                              </div>
+                              {asset.type === "lp-position" && asset.pool && (
+                                <div className="text-xs text-zinc-500 font-mono">
+                                  Pool: {asset.pool.slice(0, 6)}…{asset.pool.slice(-4)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-4 pr-4 font-semibold text-emerald-400">
+                              {formatCurrency(asset.valueUsd)}
+                              {asset.type === "lp-position" && asset.inRange !== undefined && (
+                                <div className={`text-xs font-medium ${asset.inRange ? "text-green-400" : "text-red-400"}`}>
+                                  {asset.inRange ? "● In Range" : "● Out of Range"}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {portfolio.assets.length === 0 && (
+            <div className="rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-800 p-12 text-center">
+              <div className="text-4xl mb-4">🔍</div>
+              <div className="text-zinc-400 text-lg font-medium">No assets found.</div>
+              <div className="text-zinc-600 text-sm mt-2 max-w-md mx-auto">
+                This wallet may not have any meaningful assets on supported chains.
+              </div>
+            </div>
+          )}
+        </>
       )}
     </DashboardShell>
   );
