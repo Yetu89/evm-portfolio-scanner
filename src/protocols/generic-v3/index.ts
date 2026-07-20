@@ -31,6 +31,12 @@ export function createGenericV3Adapter(id: string, name: string): Protocol {
             tokenId
           );
 
+          // Skip inactive positions (enrichV3Position returns null if liquidity=0)
+          if (!portfolioData) {
+            console.log(`[V3-SCAN] Position ${tokenId} skipped (inactive/empty)`);
+            continue;
+          }
+
           positions.push({
             wallet,
             chain: chainConfig.name,
@@ -49,8 +55,8 @@ export function createGenericV3Adapter(id: string, name: string): Protocol {
             tokenId,
             protocol: protocolConfig.name,
             pool: "",
-            token0: "",
-            token1: "",
+            token0: "0x0000000000000000000000000000000000000000",
+            token1: "0x0000000000000000000000000000000000000000",
             fee: 0,
             tickLower: 0,
             tickUpper: 0,
@@ -59,6 +65,7 @@ export function createGenericV3Adapter(id: string, name: string): Protocol {
             tokensOwed1: "0",
             amount0: "0",
             amount1: "0",
+            inRange: false,
           });
         }
       }

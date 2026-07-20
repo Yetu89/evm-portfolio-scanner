@@ -15,7 +15,7 @@ export const UniswapV4: Protocol = {
     protocolConfig: ProtocolConfig
   ): Promise<Position[]> {
     console.log(`[V4-SCAN] Starting scan for wallet=${wallet} on ${chainConfig.name}, manager=${protocolConfig.positionManager}`);
-    
+
     const tokenIds = await getOwnedTokenIds(
       chainConfig.rpcUrl,
       protocolConfig.positionManager as Address,
@@ -34,6 +34,12 @@ export const UniswapV4: Protocol = {
           tokenId,
           protocolConfig.stateView as Address | undefined
         );
+
+        // Skip inactive positions (enrichV4Position returns null if liquidity=0)
+        if (!portfolioData) {
+          console.log(`[V4-SCAN] Position ${tokenId} skipped (inactive/empty)`);
+          continue;
+        }
 
         positions.push({
           wallet,
@@ -67,6 +73,7 @@ export const UniswapV4: Protocol = {
       }
     }
 
+    console.log(`[V4-SCAN] Result: ${positions.length} active positions`);
     return positions;
   },
 };

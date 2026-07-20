@@ -52,6 +52,85 @@ async function fetchAllTokenTransfers(
   return transfers;
 }
 
+/**
+ * Check if a Position NFT is still active (has liquidity > 0 and not burnt).
+ * This filters out:
+ * - Closed positions (liquidity = 0)
+ * - Burnt tokens (ownerOf reverts)
+ * - Positions with zero liquidity in positionInfo
+ */
+async function isPositionActive(
+  client: ReturnType<typeof createRpcClient>,
+  contract: Address,
+  tokenId: string
+): Promise<boolean> {
+  try {
+    // Check 1: Is token still owned by anyone? (ownerOf must succeed)
+    const owner = await client.readContract({
+      address: contract,
+      abi: ERC721_ABI,
+      functionName: "ownerOf",
+      args: [BigInt(tokenId)],
+    });
+    if (!owner || owner === ZERO_ADDRESS) {
+      return false; // Burnt / transferred to zero
+    }
+
+    // Check 2: Does position have liquidity? (V4-specific via getPositionLiquidity)
+    // Try V4 getPositionLiquidity first
+    try {
+      const liquidity = await client.readContract({
+        address: contract,
+        abi: [
+          {
+            type: "function",
+            stateMutability: "view",
+            name: "getPositionLiquidity",
+            inputs: [{ name: "tokenId", type: "uint256" }],
+            outputs: [{ name: "liquidity", type: "uint128" }],
+          },
+        ],
+        functionName: "getPositionLiquidity",
+        args: [BigInt(tokenId)],
+      }) as bigint;
+      if (liquidity === BigInt(0)) {
+        return false; // Closed / empty position
+      }
+    } catch {
+      // Fallback: check if contract supports V3-style position data
+      // Try positions() for V3 or positionInfo for V4
+      try {
+        const pos = await client.readContract({
+          address: contract,
+          abi: [
+            {
+              type: "function",
+              stateMutability: "view",
+              name: "positionInfo",
+              inputs: [{ name: "tokenId", type: "uint256" }],
+              outputs: [{ name: "", type: "uint256" }],
+            },
+          ],
+          functionName: "positionInfo",
+          args: [BigInt(tokenId)],
+        }) as bigint;
+        // V4: liquidity is bits 56-255, extract and check
+        const liq = Number(pos >> BigInt(56));
+        if (liq === 0) {
+          return false; // No liquidity
+        }
+      } catch {
+        // Can't verify liquidity — assume active if ownerOf succeeded
+        // This is fallback for contracts without liquidity query
+      }
+    }
+
+    return true; // Position is active
+  } catch {
+    return false; // Token doesn't exist or is invalid
+  }
+}
+
 export async function getOwnedTokenIds(
   rpcUrl: string,
   contract: Address,
@@ -60,6 +139,8 @@ export async function getOwnedTokenIds(
 ): Promise<string[]> {
   const walletLower = owner.toLowerCase();
   const zeroAddressLower = ZERO_ADDRESS.toLowerCase();
+
+  const client = createRpcClient(rpcUrl);
 
   if (blockscoutUrl) {
     const candidateIds = new Set<string>();
@@ -88,33 +169,21 @@ export async function getOwnedTokenIds(
       return [];
     }
 
-    const client = createRpcClient(rpcUrl);
+    // Filter candidates: only keep if still owned AND active (liquidity > 0)
     const ownedTokenIds: string[] = [];
 
     for (const tokenId of candidateIds) {
-      try {
-        const currentOwner = await client.readContract({
-          address: contract,
-          abi: ERC721_ABI,
-          functionName: "ownerOf",
-          args: [BigInt(tokenId)],
-        });
-
-        if (currentOwner.toLowerCase() === walletLower) {
-          ownedTokenIds.push(tokenId);
-        }
-      } catch (error) {
-        if (tokenId === "0" || walletLower === zeroAddressLower) {
-          throw error;
-        }
+      const isActive = await isPositionActive(client, contract, tokenId);
+      if (isActive) {
+        ownedTokenIds.push(tokenId);
       }
     }
 
     return ownedTokenIds;
   }
 
-  const client = createRpcClient(rpcUrl);
-
+  // Fallback: enumerable ERC721 (no support for liquidity check at this layer)
+  // Enrich layer will handle liquidity filtering
   const enumerableAbi = [
     {
       type: "function",

@@ -8,25 +8,7 @@ export async function enrichV3Position(
   rpcUrl: string,
   positionManager: Address,
   tokenId: string
-): Promise<{
-  pool: string;
-  token0: string;
-  token1: string;
-  fee: number;
-  tickLower: number;
-  tickUpper: number;
-  liquidity: string;
-  tokensOwed0: string;
-  tokensOwed1: string;
-  amount0: string;
-  amount1: string;
-  inRange: boolean;
-  currentTick: number;
-  token0Symbol?: string;
-  token1Symbol?: string;
-  token0Decimals?: number;
-  token1Decimals?: number;
-}> {
+): Promise<{ pool: string; token0: string; token1: string; fee: number; tickLower: number; tickUpper: number; liquidity: string; tokensOwed0: string; tokensOwed1: string; amount0: string; amount1: string; inRange: boolean; currentTick: number; token0Symbol?: string; token1Symbol?: string; token0Decimals?: number; token1Decimals?: number; } | null> {
   const client = createRpcClient(rpcUrl);
 
   // Get position details from position manager
@@ -158,8 +140,14 @@ export async function enrichV3Position(
       amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity).toString();
     }
 
-    return {
-      pool: pool as unknown as string,
+  // Skip inactive positions (liquidity=0 means closed/empty)
+  if (liquidity === BigInt(0)) {
+    console.log(`[ENRICH] Position ${tokenId} inactive (liquidity=0) — skipping`);
+    return null;
+  }
+
+  return {
+    pool: pool as unknown as string,
       token0: token0.toLowerCase(),
       token1: token1.toLowerCase(),
       fee,

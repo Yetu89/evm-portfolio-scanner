@@ -68,25 +68,7 @@ export async function enrichV4Position(
   positionManager: Address,
   tokenId: string,
   stateViewAddress?: Address
-): Promise<{
-  pool: string;
-  token0: string;
-  token1: string;
-  fee: number;
-  tickLower: number;
-  tickUpper: number;
-  liquidity: string;
-  tokensOwed0: string;
-  tokensOwed1: string;
-  amount0: string;
-  amount1: string;
-  inRange: boolean;
-  currentTick: number;
-  token0Symbol?: string;
-  token1Symbol?: string;
-  token0Decimals?: number;
-  token1Decimals?: number;
-}> {
+): Promise<{ pool: string; token0: string; token1: string; fee: number; tickLower: number; tickUpper: number; liquidity: string; tokensOwed0: string; tokensOwed1: string; amount0: string; amount1: string; inRange: boolean; currentTick: number; token0Symbol?: string; token1Symbol?: string; token0Decimals?: number; token1Decimals?: number; } | null> {
   console.log(
     `[V4-ENRICH] Starting enrichment for tokenId=${tokenId}, manager=${positionManager}`
   );
@@ -273,6 +255,12 @@ export async function enrichV4Position(
         err
       );
     }
+  }
+
+  // Skip inactive positions (liquidity=0 means closed/empty)
+  if (liquidity === BigInt(0)) {
+    console.log(`[V4-ENRICH] Position ${tokenId} inactive (liquidity=0) — skipping`);
+    return null;
   }
 
   console.log(
